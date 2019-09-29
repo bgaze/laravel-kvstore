@@ -28,9 +28,10 @@ php artisan migrate
 
 ## Usage
 
-The `KvStore` helper offers statis methods to manage the store content.  
+The `KvStore` helper offers static methods to manage the store content.  
 
-> Defined as an alias using composer, `KvStore` helper is available everywhere, no need to include it with a `use` statment.
+> Defined as an alias using composer, `KvStore` helper is available everywhere.
+> No need to include it with a `use` statment.
 
 To add or modify a value, use the `set` function:
 
@@ -69,7 +70,7 @@ You can also get all the store content as a collection using the `all` function:
 $store = KvStore::all()->toArray();
 ```
 
-Finally, you can remove entries fromthe store using `remove` function:
+Finally, you can remove entries from the store using `remove` function:
 
 ```php
 // Remove an entry by key:
@@ -92,7 +93,7 @@ Values casting uses in background Eloquent Model's Attribute Casting, please see
 
 All the store values are stored into database but managed using cache to avoid unecessary queries.
 
-When the stored content is modified, or when Laravel appication cache is cleared, the store cache is automatically regenerated.
+When the stored content is modified, or when Laravel application cache is cleared, the store cache is automatically regenerated.
 
 ## Available functions
 
