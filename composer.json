@@ -1,0 +1,29 @@
+{
+    "name": "bgaze/laravel-kvstore",
+    "description": "A simple and easy to use key-value store for Laravel 5.5+",
+    "require": {
+        "laravel/framework": ">=5.5.0"
+    },
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Bgaze",
+            "email": "benjamin@bgaze.fr"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Bgaze\\KvStore\\ServiceProvider"
+            ],
+            "aliases": {
+                "KvStore": "Bgaze\\KvStore\\Client"
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Bgaze\\KvStore\\": "src"
+        }
+    }
+}
