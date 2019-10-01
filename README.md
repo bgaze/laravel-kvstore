@@ -4,7 +4,7 @@ A simple and easy to use key-value database store for Laravel 5.5+
 
 All values are stored into database and managed using cache to avoid unecessary queries.
 
-Casting is supported to force a value type.
+Casting is supported to manage values type.
 
 ## Installation
 
@@ -30,8 +30,8 @@ php artisan migrate
 
 The `KvStore` helper offers static methods to manage the store content.  
 
-> Defined as an alias using composer, `KvStore` helper is available everywhere.
-> No need to include it with a `use` statment.
+> `KvStore` is an alias to `Bgaze\KvStore\Client`.  
+> It can be included with a `use` statment, or directly used everywhere in your app using its "full name": `\KvStore::set(...)`.
 
 To add or modify a value, use the `set` function:
 
