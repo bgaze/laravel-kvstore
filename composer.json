@@ -17,7 +17,7 @@
                 "Bgaze\\KvStore\\ServiceProvider"
             ],
             "aliases": {
-                "KvStore": "Bgaze\\KvStore\\Client"
+                "KvStore": "Bgaze\\KvStore\\Facade"
             }
         }
     },
