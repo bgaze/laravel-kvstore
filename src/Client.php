@@ -23,7 +23,7 @@ class Client {
      * @param string $key
      * @param mixed $value
      * @param string|null $type
-     * @return $this
+     * @return void
      */
     public static function set($key, $value, $type = null) {
         $entry = Store::firstOrNew(['key' => $key]);
@@ -56,7 +56,7 @@ class Client {
      * Remove a setting by key.
      *
      * @param  string|array  $keys
-     * @return $this
+     * @return void
      */
     public static function remove($keys) {
         Store::destroy($keys);
@@ -77,7 +77,7 @@ class Client {
     /**
      * Force cache refresh.
      * 
-     * @return $this
+     * @return void
      */
     public static function refresh() {
         Cache::forget(self::CACHE);

@@ -5,9 +5,13 @@ namespace Bgaze\KvStore;
 use Illuminate\Support\Facades\Facade as Base;
 
 /**
- * Description of Facade
+ * @method static void set($key, $value, $type = null)
+ * @method static mixed get($key, $default = null)
+ * @method static void remove($keys)
+ * @method static \Illuminate\Support\Collection all()
+ * @method static void refresh()
  *
- * @author bgaze
+ * @see \Bgaze\KvStore\Client
  */
 class Facade extends Base {
 

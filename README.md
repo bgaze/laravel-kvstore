@@ -28,10 +28,7 @@ php artisan migrate
 
 ## Usage
 
-The `KvStore` helper offers static methods to manage the store content.  
-
-> `KvStore` is an alias to `Bgaze\KvStore\Client`.  
-> It can be included with a `use` statment, or directly used everywhere in your app using its "full name": `\KvStore::set(...)`.
+The `KvStore` facade offers static methods to manage the store content.  
 
 To add or modify a value, use the `set` function:
 
