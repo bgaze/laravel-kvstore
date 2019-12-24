@@ -11,7 +11,7 @@ Casting is supported to manage values type.
 Install the package using composer:
 
 ```
-composer install bgaze/laravel-kvstore
+composer require bgaze/laravel-kvstore
 ```
 
 Publish the required migration:
