@@ -30,8 +30,6 @@ Then create the table:
 php artisan migrate
 ```
 
-## Usage
-
 The `KvStore` facade offers static methods to manage the store content.  
 
 ```php
