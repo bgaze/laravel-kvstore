@@ -48,10 +48,10 @@ KvStore::set('value3', 22222, 'integer');
 KvStore::set('value3', 22222, false);
 
 // Get value by key:
-$value1 = KvStore::set('value1');
+$value1 = KvStore::get('value1');
 
 // Get value by key, passing a default value:
-$value2 = KvStore::set('value2', 'default value');
+$value2 = KvStore::get('value2', 'default value');
 
 // Remove an entry by key:
 KvStore::remove('value1');
