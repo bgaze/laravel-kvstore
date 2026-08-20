@@ -21,8 +21,10 @@ return [
     | Cache
     |--------------------------------------------------------------------------
     |
-    | The whole store is cached as one single entry holding every key and its
-    | already cast value, so a cold read costs one query for the whole store.
+    | The whole store is cached as one single entry holding every key, its raw
+    | value and its cast name, so a cold read costs one query for the whole
+    | store. Casts are applied when the store is read, never before it is
+    | cached: nothing but strings and nulls goes in there.
     |
     | "store" is the cache store to use, or null for the application default.
     | "key" is the cache entry name. "auto_invalidate" drops that entry as soon
