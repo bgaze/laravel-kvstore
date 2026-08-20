@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Facade as Base;
  * @method static void remove(string|list<string> $keys)
  * @method static \Illuminate\Support\Collection<string, mixed> all()
  * @method static void refresh()
+ * @method static void flushResolved()
  *
  * @see Client
  */

@@ -87,19 +87,29 @@ KvStore::set('retries', '5', false);       // remove it
 ```
 
 Anything else raises an exception, and nothing is written. Encrypted casts are
-refused: the store caches values once cast, so an `encrypted:*` cast would write
-the cleartext into your cache store.
+refused: the store is read as a whole, so every encrypted entry would be
+decrypted on every request whether you use it or not.
 
 ## Cache
 
-The whole store is cached as **one single entry**, values already cast. A cold
-read costs one query for every key at once; every read afterwards costs none.
-This suits a store read on most requests, and it means any write invalidates
-every key together.
+The whole store is cached as **one single entry**, holding raw values and their
+cast name. A cold read costs one query for every key at once, the result is held
+for the rest of the request, and no read after that costs a query or even a cache
+round-trip. This suits a store read on most requests, and it means any write
+invalidates every key together.
+
+Nothing but strings goes into the cache, never a value already cast, so the
+package works with a cache store told to restrict unserialization
+(`cache.serializable_classes`). On Octane the in-memory copy is dropped at the
+start of every request.
 
 Writes through the facade invalidate the cache. So do writes through the
 `Bgaze\KvStore\Entry` model, which covers seeders and direct model writes. A raw
 SQL write cannot be seen — call `KvStore::refresh()` yourself after one.
+
+Reading the store before its migration has run is survivable: it reads as empty
+and logs a warning, rather than making your application unbootable. Any other
+database failure is raised as usual.
 
 Publish the config file to choose the table, the cache store, the cache entry
 name, or to manage invalidation yourself:
@@ -107,6 +117,10 @@ name, or to manage invalidation yourself:
 ```
 php artisan vendor:publish --tag=kvstore-config
 ```
+
+## Upgrading from 2.0
+
+Nothing to do. The cached payload changed shape and is rebuilt on the first read.
 
 ## Upgrading from 1.x
 
@@ -119,6 +133,7 @@ already in place.
 | `Client` methods are no longer static | Use the `KvStore` facade, or inject `Bgaze\KvStore\Client`. The `kvstore.client` container key still works |
 | The cast passed to `set()` is now validated | A free-form cast name used to reach the framework and fail there; it is now refused up front, by name |
 | `encrypted:*` casts are refused | Encrypt the value yourself before storing it |
+| Reading the store before migrating no longer throws | Nothing. It reads as empty and logs a warning |
 | Writes through the `Entry` model now invalidate the cache | Nothing, unless you relied on the stale read. Turn it off with `kvstore.cache.auto_invalidate` |
 | The default cache entry name is now `kvstore` | Nothing. The old `settings-store-cache` entry is simply orphaned |
 | The publish tag is now split | `--tag=kvstore-migrations`, `--tag=kvstore-config`, or `--tag=kvstore` for both |

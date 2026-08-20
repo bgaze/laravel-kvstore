@@ -44,9 +44,9 @@ vendor/bin/phpstan analyse
 
 Five source files plus a config file, no abstraction layer:
 
-- `src/Client.php` — the whole public API: `set()`, `get()`, `has()`, `remove()`, `all()`, `refresh()`.
-  An injectable service taking the cache factory and the config repository; bound as a singleton on
-  `Client::class`, with `kvstore.client` kept as an alias.
+- `src/Client.php` — the whole public API: `set()`, `get()`, `has()`, `remove()`, `all()`, `refresh()`,
+  `flushResolved()`. An injectable service taking the cache factory, the config repository and a logger;
+  bound as a singleton on `Client::class`, with `kvstore.client` kept as an alias.
 - `src/Entry.php` — the Eloquent model over the store table. String primary key `key`, non-incrementing,
   no timestamps. `getTable()` reads `kvstore.table`. `getCasts()` is **overridden** so the row's own `type`
   column drives the cast at runtime; `setAttribute()` coerces `null` to `[]` for JSON-castable values.
@@ -58,14 +58,29 @@ Five source files plus a config file, no abstraction layer:
 - `config/kvstore.php` — `table`, `cache.store`, `cache.key`, `cache.auto_invalidate`. Merged by the
   provider, so the defaults hold without publishing.
 
-**Caching model.** The store is cached as **one single entry** (`rememberForever`, key `kvstore.cache.key`)
-holding the whole `key => value` collection, values already cast. Every write drops that entry wholesale, so
-the next read repopulates the entire store in one query. Deliberate for a settings-sized store; it is not a
-per-key cache and must not be mistaken for one.
+**Caching model.** The store is cached as **one single entry** (key `kvstore.cache.key`) holding every key,
+its **raw** value and its cast name — `['k' => ['value' => '3', 'type' => 'integer']]`. **Never a value
+already cast**: that would put `Carbon` / `Collection` / `stdClass` in the cache, which a store configured
+with `cache.serializable_classes` cannot rebuild — it returns `__PHP_Incomplete_Class` and every read blows
+up. Casts are applied on read. Every write drops the entry wholesale, so the next read repopulates the whole
+store in one query. Deliberate for a settings-sized store; it is not a per-key cache.
 
-**Invalidation.** `set()` and `remove()` drop the cache. So do the `saved` and `deleted` model events on
-`Entry`, which covers a seeder or a direct model write; switch that off with `kvstore.cache.auto_invalidate`.
-A raw SQL write cannot be observed at all — `refresh()` is the only remedy and stays public for it.
+A payload in an older shape is **rebuilt rather than read** (`Client::isRawStore()`), so upgrading needs no
+cache flush.
+
+**Memoisation.** The cast collection is held in `Client::$resolved` for the rest of the request, so repeated
+reads cost neither a query nor a cache round-trip. The client is a **singleton**, so that state outlives the
+request on an event-driven server: the provider wires `flushResolved()` to Octane's `RequestReceived`.
+Removing that listener reintroduces cross-request stale reads.
+
+**Invalidation.** `set()` and `remove()` drop both the cache and the memo. So do the `saved` and `deleted`
+model events on `Entry`, which covers a seeder or a direct model write; switch that off with
+`kvstore.cache.auto_invalidate`. A raw SQL write cannot be observed at all — `refresh()` is the only remedy
+and stays public for it.
+
+**Missing table.** Reading the store before its migration has run reads as **empty** with a logged warning,
+and the emptiness is **not cached** so it heals after `migrate`. The guard is narrow: it rethrows anything it
+cannot positively identify as a missing table, so an unreachable database never turns into an empty store.
 
 **The `$type` argument of `set()` is three-state**, and this is the part callers get wrong:
 
@@ -76,7 +91,9 @@ A raw SQL write cannot be observed at all — `refresh()` is the only remedy and
 | `false`                    | **remove** the cast                       |
 
 Anything else raises `InvalidArgumentException` and nothing is written. `encrypted:*` is refused on purpose:
-the store caches values *once cast*, so it would write the cleartext into the cache store.
+the store is read as a whole, so every encrypted entry would be decrypted on every request whether it is used
+or not. (Before the raw-value cache, the reason was stronger — the cleartext was written to the cache store.
+Lifting the restriction is now defensible, and a decision of its own.)
 
 ## Pitfalls
 
@@ -92,6 +109,9 @@ the store caches values *once cast*, so it would write the cleartext into the ca
   limitation; changing it would be a decision of its own.
 - **`key` is bounded to 191 characters** so a primary key on it stays within the index size limit of older
   MySQL/InnoDB running `utf8mb4`. Do not widen it without that in mind.
+- **Rehydrating an entry from the cache sets both raw attributes in one call.** `setRawAttributes()`
+  *replaces* the attribute array, so hydrating the value and the type in two steps lets the second wipe the
+  first — leaving `getCasts()` blind and the value returned raw. `Client::cast()` passes both at once.
 - **A fluent `unique()` next to a fluent `primary()` does nothing.** Only the first fluent index of a column
   is registered and `primary` is tested first. `tests/MigrationTest.php` pins the compiled DDL.
 

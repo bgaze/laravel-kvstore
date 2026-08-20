@@ -42,6 +42,7 @@ kept as an alias.
 | `remove` | `remove(string\|array $keys): void` | — |
 | `all` | `all(): Collection<string, mixed>` | the whole store, keyed by key, values cast |
 | `refresh` | `refresh(): void` | — |
+| `flushResolved` | `flushResolved(): void` | — |
 
 ```php
 use Bgaze\KvStore\Client;
@@ -85,9 +86,9 @@ the value is read. Supported names:
 `date`, `datetime`, `decimal`, `immutable_date` and `immutable_datetime` accept
 a parameter: `decimal:2`, `datetime:Y-m-d H:i`.
 
-**Encrypted casts are refused.** The store caches values *once cast*, so an
-`encrypted:*` cast would write the cleartext into the cache store. Encrypt the
-value yourself before handing it over if you need that.
+**Encrypted casts are refused.** The store is read as a whole, so every
+encrypted entry would be decrypted on every request whether it is used or not.
+Encrypt the value yourself before handing it over if you need that.
 
 A `null` written on a JSON-backed cast (`array`, `json`, `object`,
 `collection`) is stored as an empty array, so such an entry always reads back as
@@ -99,20 +100,52 @@ comes back as `null`, whatever the default. Use `has()` to tell them apart.
 
 ## Cache model
 
-The store is cached as **one single entry** holding the whole `key => value`
-collection, values already cast. A cold read costs **one query for the whole
-store**; every read afterwards costs none.
+The store is cached as **one single entry** holding every key, its **raw** value
+and its cast name:
+
+```php
+['retries' => ['value' => '3', 'type' => 'integer'], ...]
+```
+
+Nothing but strings and nulls goes into the cache — never a value already cast.
+That matters: caching cast values would put `Carbon`, `Collection` and
+`stdClass` instances in there, and a cache store told to restrict
+unserialization (`cache.serializable_classes`) cannot rebuild them. Casts are
+applied when the store is read.
+
+A cold read costs **one query for the whole store**. The result is then held for
+the rest of the request, so repeated reads cost neither a query nor a cache
+round-trip.
 
 This is not a per-key cache and must not be mistaken for one. The trade-off is
 deliberate: it suits a store read almost entirely on every request, and it means
 any write drops the cache for every key at once.
 
-- `set()` and `remove()` drop the cached store.
-- Saving or deleting an `Entry` through the model drops it too, so a seeder or a
-  direct model write does not leave stale reads behind. Turn this off with
+- `set()` and `remove()` drop the cached store and the one held in memory.
+- Saving or deleting an `Entry` through the model drops them too, so a seeder or
+  a direct model write does not leave stale reads behind. Turn this off with
   `kvstore.cache.auto_invalidate` if you want to manage invalidation yourself.
 - A **raw SQL write cannot be observed at all**. Call `KvStore::refresh()`
   yourself after one.
+- `flushResolved()` drops only the store held in memory, leaving the shared
+  cache alone. On Octane it is called at the start of every request, so a worker
+  never serves one request the store it resolved for another. You rarely need it
+  by hand.
+
+**A payload written by an earlier version is rebuilt, not read.** Upgrading needs
+no cache flush.
+
+## Reading the store before its table exists
+
+An application that reads a setting while booting cannot start at all before the
+migration has run — which would also break the very command that creates the
+table. So when the table is missing, the store reads as **empty** and logs a
+warning, and that emptiness is **not cached**: the next read tries again, so it
+heals by itself once the migration has run.
+
+Any other database failure is raised as usual. The guard is narrow on purpose:
+hiding an unreachable database would turn an outage into a silently empty
+store.
 
 ## Configuration
 
@@ -157,6 +190,12 @@ break casting silently.
   is the intended design, not an oversight.
 - **`value` is a `text` column**, so roughly 64 KB per entry. Change the column
   in the published migration if you need more.
+
+## Upgrading from 2.0
+
+Nothing to do. The cached payload changed shape and is rebuilt on first read.
+`flushResolved()` is new, and the store is now held in memory for the duration of
+a request.
 
 ## Upgrading from 1.x
 

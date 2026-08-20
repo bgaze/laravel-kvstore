@@ -18,6 +18,10 @@ use Illuminate\Support\Facades\DB;
  */
 class CacheBehaviorTest extends TestCase
 {
+    /**
+     * Raw values and their cast name go into the cache, never a value already
+     * cast: an object in there is something a hardened cache cannot rebuild.
+     */
     public function test_the_whole_store_is_cached_under_one_single_entry(): void
     {
         KvStore::set('a', '42', 'integer');
@@ -25,10 +29,53 @@ class CacheBehaviorTest extends TestCase
 
         KvStore::all();
 
-        $cached = Cache::get('kvstore');
+        $this->assertSame([
+            'a' => ['value' => '42', 'type' => 'integer'],
+            'b' => ['value' => 'a string', 'type' => null],
+        ], Cache::get('kvstore'));
+    }
 
-        $this->assertInstanceOf(Collection::class, $cached);
-        $this->assertSame(['a' => 42, 'b' => 'a string'], $cached->all());
+    /**
+     * The store is read from the cache and cast once, then held for the rest of
+     * the request.
+     */
+    public function test_the_store_is_resolved_once_per_request(): void
+    {
+        KvStore::set('key', 'first');
+        KvStore::all();
+
+        Cache::forever('kvstore', ['key' => ['value' => 'second', 'type' => null]]);
+
+        $this->assertSame('first', KvStore::get('key'));
+
+        KvStore::flushResolved();
+
+        $this->assertSame('second', KvStore::get('key'));
+    }
+
+    public function test_flushing_the_resolved_store_leaves_the_cache_alone(): void
+    {
+        KvStore::set('key', 'a value');
+        KvStore::all();
+
+        KvStore::flushResolved();
+
+        $this->assertTrue(Cache::has('kvstore'));
+    }
+
+    /**
+     * The previous major cached values already cast, under the same key. Such a
+     * payload is rebuilt rather than read, so upgrading needs no cache flush.
+     */
+    public function test_a_payload_from_the_previous_major_is_rebuilt(): void
+    {
+        KvStore::set('key', '42', 'integer');
+
+        Cache::forever('kvstore', new Collection(['key' => 42]));
+        KvStore::flushResolved();
+
+        $this->assertSame(42, KvStore::get('key'));
+        $this->assertSame(['key' => ['value' => '42', 'type' => 'integer']], Cache::get('kvstore'));
     }
 
     public function test_a_cold_read_costs_one_query_and_the_next_ones_cost_none(): void

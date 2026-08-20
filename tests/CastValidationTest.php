@@ -68,7 +68,7 @@ class CastValidationTest extends TestCase
 
     public function test_the_refusal_of_an_encrypted_cast_explains_itself(): void
     {
-        $this->expectExceptionMessage('cleartext would be written to the cache store');
+        $this->expectExceptionMessage('decrypted on every request');
 
         KvStore::set('key', 'a value', 'encrypted');
     }

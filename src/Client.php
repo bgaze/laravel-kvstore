@@ -7,8 +7,11 @@ namespace Bgaze\KvStore;
 use Illuminate\Contracts\Cache\Factory as CacheFactory;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Contracts\Config\Repository as ConfigRepository;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Collection;
 use InvalidArgumentException;
+use Psr\Log\LoggerInterface;
+use Throwable;
 
 /**
  * The public API of the store.
@@ -54,9 +57,22 @@ class Client
         'immutable_datetime',
     ];
 
+    /**
+     * The store resolved for the current request.
+     *
+     * Reading the whole store means fetching one cache entry and applying a
+     * cast per value; memoising that spares every read after the first. The
+     * client is a singleton, so on an event-driven server this outlives the
+     * request: the service provider wires flushResolved() to Octane for that.
+     *
+     * @var Collection<string, mixed>|null
+     */
+    private ?Collection $resolved = null;
+
     public function __construct(
         private readonly CacheFactory $cache,
         private readonly ConfigRepository $config,
+        private readonly LoggerInterface $logger,
     ) {}
 
     /**
@@ -127,17 +143,13 @@ class Client
      * Get the whole store, keyed by entry key, with every cast applied.
      *
      * The store is cached as one single entry, so this costs one query on a
-     * cold read and none afterwards.
+     * cold read and none afterwards, and one cache read per request.
      *
      * @return Collection<string, mixed>
      */
     public function all(): Collection
     {
-        /** @var Collection<string, mixed> */
-        return $this->store()->rememberForever(
-            $this->cacheKey(),
-            fn (): Collection => Entry::all()->pluck('value', 'key')
-        );
+        return $this->resolved ??= $this->cast($this->raw());
     }
 
     /**
@@ -148,7 +160,158 @@ class Client
      */
     public function refresh(): void
     {
+        $this->resolved = null;
+
         $this->store()->forget($this->cacheKey());
+    }
+
+    /**
+     * Drop the store resolved for the current request, leaving the shared cache
+     * alone.
+     *
+     * Wired to Octane by the service provider so a worker does not serve one
+     * request the store it resolved for another. Rarely needed by hand.
+     */
+    public function flushResolved(): void
+    {
+        $this->resolved = null;
+    }
+
+    /**
+     * Get the store as it is cached: raw values and their cast name, no objects.
+     *
+     * Nothing but strings and nulls goes into the cache. Caching values once
+     * cast would put Carbon, Collection and stdClass instances in there, which
+     * a store told to restrict unserialization cannot rebuild.
+     *
+     * @return array<string, array{value: string|null, type: string|null}>
+     */
+    private function raw(): array
+    {
+        $store = $this->store();
+        $key = $this->cacheKey();
+
+        $cached = $store->get($key);
+
+        if ($this->isRawStore($cached)) {
+            return $cached;
+        }
+
+        try {
+            $loaded = $this->load();
+        } catch (QueryException $e) {
+            if (! $this->tableIsMissing()) {
+                throw $e;
+            }
+
+            $this->logger->warning(
+                'The kvstore table does not exist yet, so the store reads as empty. '
+                .'This happens when the store is read before its migration has run.'
+            );
+
+            // Not cached: the next read tries again, so this heals by itself
+            // once the migration has run.
+            return [];
+        }
+
+        $store->forever($key, $loaded);
+
+        return $loaded;
+    }
+
+    /**
+     * Read every entry from the database, without casting anything.
+     *
+     * @return array<string, array{value: string|null, type: string|null}>
+     */
+    private function load(): array
+    {
+        return Entry::all()
+            ->mapWithKeys(fn (Entry $entry): array => [
+                $entry->key => [
+                    'value' => $entry->getRawOriginal('value'),
+                    'type' => $entry->type,
+                ],
+            ])
+            ->all();
+    }
+
+    /**
+     * Apply each entry's own cast to its raw value.
+     *
+     * @param  array<string, array{value: string|null, type: string|null}>  $raw
+     * @return Collection<string, mixed>
+     */
+    private function cast(array $raw): Collection
+    {
+        return new Collection(array_map(
+            function (array $entry): mixed {
+                $type = $entry['type'];
+
+                if (! is_string($type) || $type === '') {
+                    return $entry['value'];
+                }
+
+                // Both raw attributes go in with one call on purpose: the cast
+                // is read from the entry's own type, and hydrating them in two
+                // steps lets the second call wipe what the first one set.
+                return (new Entry)
+                    ->setRawAttributes(['value' => $entry['value'], 'type' => $type], true)
+                    ->value;
+            },
+            $raw
+        ));
+    }
+
+    /**
+     * Determine whether a cached payload is in the shape this version writes.
+     *
+     * The previous major cached a collection of values already cast. Rejecting
+     * anything else rebuilds the entry instead of failing on it, so upgrading
+     * needs no cache flush.
+     *
+     * @phpstan-assert-if-true array<string, array{value: string|null, type: string|null}> $payload
+     */
+    private function isRawStore(mixed $payload): bool
+    {
+        if (! is_array($payload)) {
+            return false;
+        }
+
+        foreach ($payload as $key => $entry) {
+            if (! is_string($key) || ! is_array($entry)) {
+                return false;
+            }
+
+            foreach (['value', 'type'] as $attribute) {
+                if (! array_key_exists($attribute, $entry)) {
+                    return false;
+                }
+
+                if ($entry[$attribute] !== null && ! is_string($entry[$attribute])) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Determine whether the store table is simply not there yet.
+     *
+     * Answering "no" when it cannot be told is deliberate: the caller then
+     * rethrows the original failure rather than hiding it.
+     */
+    private function tableIsMissing(): bool
+    {
+        try {
+            $entry = new Entry;
+
+            return ! $entry->getConnection()->getSchemaBuilder()->hasTable($entry->getTable());
+        } catch (Throwable) {
+            return false;
+        }
     }
 
     /**
@@ -160,9 +323,9 @@ class Client
     {
         if (str_starts_with($type, 'encrypted')) {
             throw new InvalidArgumentException(
-                "The [{$type}] cast is not supported: the store caches values once cast, "
-                .'so the cleartext would be written to the cache store. Encrypt the value '
-                .'yourself before handing it over instead.'
+                "The [{$type}] cast is not supported: the store is read as a whole, so "
+                .'every encrypted entry would be decrypted on every request whether it is '
+                .'used or not. Encrypt the value yourself before handing it over instead.'
             );
         }
 

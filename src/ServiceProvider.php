@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Bgaze\KvStore;
 
 use Illuminate\Contracts\Config\Repository as ConfigRepository;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider as Base;
 
 /**
@@ -12,6 +13,13 @@ use Illuminate\Support\ServiceProvider as Base;
  */
 class ServiceProvider extends Base
 {
+    /**
+     * The Octane event marking the start of a request.
+     *
+     * Referenced by name: Octane is not a dependency of this package.
+     */
+    private const OCTANE_REQUEST_RECEIVED = 'Laravel\\Octane\\Events\\RequestReceived';
+
     /**
      * Register the package services.
      *
@@ -40,6 +48,26 @@ class ServiceProvider extends Base
         ], ['kvstore', 'kvstore-migrations']);
 
         $this->registerCacheInvalidation();
+
+        $this->registerRequestIsolation();
+    }
+
+    /**
+     * Drop the store resolved in memory at the start of every Octane request.
+     *
+     * The client is a singleton, so on an event-driven server it outlives the
+     * request that resolved the store. Without this, a worker would serve one
+     * request the store it read for another.
+     */
+    private function registerRequestIsolation(): void
+    {
+        if (! class_exists(self::OCTANE_REQUEST_RECEIVED)) {
+            return;
+        }
+
+        Event::listen(self::OCTANE_REQUEST_RECEIVED, function (): void {
+            $this->app->make(Client::class)->flushResolved();
+        });
     }
 
     /**

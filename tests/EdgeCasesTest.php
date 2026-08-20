@@ -77,9 +77,9 @@ class EdgeCasesTest extends TestCase
     }
 
     /**
-     * An encrypted cast would be honoured in the database but defeated by the
-     * cache, which holds values once cast: the cleartext would be written to
-     * the cache store. It is refused, with the reason spelled out.
+     * An encrypted cast is refused, with the reason spelled out: the store is
+     * read as a whole, so every encrypted entry would be decrypted on every
+     * request whether it is used or not.
      */
     public function test_an_encrypted_cast_is_refused(): void
     {
@@ -92,7 +92,7 @@ class EdgeCasesTest extends TestCase
         }
 
         $this->assertInstanceOf(InvalidArgumentException::class, $thrown);
-        $this->assertStringContainsString('cache', $thrown->getMessage());
+        $this->assertStringContainsString('decrypted on every request', $thrown->getMessage());
         $this->assertSame(0, DB::table('kvstore')->count());
         $this->assertNull(Cache::get('kvstore'));
     }
