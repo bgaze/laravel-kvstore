@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Bgaze\KvStore;
 
+use DateTimeInterface;
 use Illuminate\Contracts\Cache\Factory as CacheFactory;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Contracts\Config\Repository as ConfigRepository;
@@ -119,6 +120,8 @@ class Client
         }
 
         $entry->value = $value;
+
+        $this->refuseAnUnstorableValue($key, $value, $entry);
 
         $entry->save();
 
@@ -358,6 +361,50 @@ class Client
         } catch (Throwable) {
             return false;
         }
+    }
+
+    /**
+     * Refuse a value the store cannot write, before it reaches the database.
+     *
+     * A cast that serialises the value turns it into a string as it is
+     * assigned. Without one, the value reaches a text column as it is: an array
+     * either fails the insert, or -- on an update -- gets serialised by the
+     * driver grammar and read back as a raw JSON string, silently degraded. Both
+     * are worse than an error at the call site.
+     *
+     * The check reads the attribute *after* assignment rather than reasoning
+     * about which casts serialise, so it holds whatever the framework does: what
+     * sits there is exactly what would be bound to the query.
+     *
+     * @throws InvalidArgumentException
+     */
+    private function refuseAnUnstorableValue(string $key, mixed $value, Entry $entry): void
+    {
+        if ($this->isStorableAsText($entry->getAttributes()['value'] ?? null)) {
+            return;
+        }
+
+        throw new InvalidArgumentException(sprintf(
+            'Storing a value of type [%s] under [%s] needs a cast that serialises it, '
+            .'such as [array] or [json]: as it stands the value would reach a text '
+            .'column unserialised. Pass such a cast, or serialise the value yourself.',
+            get_debug_type($value),
+            $key
+        ));
+    }
+
+    /**
+     * Determine whether a value can go into a text column as it is.
+     *
+     * Dates and stringable objects are converted on their way to the query, so
+     * they need no cast of their own.
+     */
+    private function isStorableAsText(mixed $value): bool
+    {
+        return $value === null
+            || is_scalar($value)
+            || $value instanceof DateTimeInterface
+            || (is_object($value) && method_exists($value, '__toString'));
     }
 
     /**

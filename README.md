@@ -86,6 +86,15 @@ KvStore::set('retries', '5', 'string');    // replace it
 KvStore::set('retries', '5', false);       // remove it
 ```
 
+A value also has to be storable as text. Strings, numbers, booleans, `null`,
+dates and any object with `__toString` need no cast; an array or a plain object
+does, and `set()` refuses it rather than writing something unusable:
+
+```php
+KvStore::set('features', ['beta' => true]);          // refused: needs a cast
+KvStore::set('features', ['beta' => true], 'array'); // fine
+```
+
 Anything else raises an exception, and nothing is written. Encrypted casts are
 refused: `all()` casts every entry, so one value you cannot decrypt — after an
 `APP_KEY` rotation, typically — would make your whole store unreadable rather
@@ -124,6 +133,11 @@ name, or to manage invalidation yourself:
 ```
 php artisan vendor:publish --tag=kvstore-config
 ```
+
+## Upgrading from 2.2
+
+`set()` refuses a value that cannot be written without a cast instead of storing
+it unserialised. Pass a cast that serialises it, or serialise it yourself.
 
 ## Upgrading from 2.1
 

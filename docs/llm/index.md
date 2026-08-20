@@ -101,6 +101,28 @@ On any other cast a `null` stays `null`.
 `get()` returns `$default` only when the key is **absent**. A stored `null`
 comes back as `null`, whatever the default. Use `has()` to tell them apart.
 
+## A value has to be storable
+
+The value column is `text`, so a value has to be a string by the time it gets
+there. A cast that serialises it — `array`, `json`, `object`, `collection` — does
+that as the value is assigned. A scalar cast does not, and neither does no cast
+at all.
+
+`set()` refuses a value that would reach the column unserialised, and writes
+nothing:
+
+```php
+KvStore::set('features', ['beta' => true]);            // InvalidArgumentException
+KvStore::set('features', ['beta' => true], 'integer'); // same: casts nothing
+KvStore::set('features', ['beta' => true], 'array');   // fine
+KvStore::set('features', json_encode([...]), false);   // fine: already a string
+```
+
+Anything a text column takes as it is needs no cast: strings, numbers, booleans,
+`null`, a `DateTimeInterface`, and any object with `__toString` — which includes
+a `Collection`, since it renders as its own JSON. Everything else — an array, a
+`stdClass`, an enum — needs a cast.
+
 ## Cache model
 
 The store is cached as **one single entry** holding every key, its **raw** value
@@ -200,16 +222,18 @@ break casting silently.
 
 ## Known limitations
 
-- **Removing a cast while writing a value that needs one degrades the value.**
-  `set($key, ['a'], false)` on an entry that carried a JSON cast leaves the
-  value unserialised; on an update the database driver serialises it on its own
-  and the value reads back as the raw JSON string `'["a"]'`, on an insert the
-  write fails. Remove the cast and write a scalar, in that order, or keep the
-  cast.
 - **The whole store is one cache entry**, so a write invalidates every key. This
   is the intended design, not an oversight.
 - **`value` is a `text` column**, so roughly 64 KB per entry. Change the column
   in the published migration if you need more.
+
+## Upgrading from 2.2
+
+`set()` now refuses a value that cannot be written without a cast, rather than
+letting it through unserialised. The call that used to store `['a']` with no cast
+and read it back as the string `'["a"]'` — or fail the insert outright — now
+raises `InvalidArgumentException` and writes nothing. Pass a cast that serialises
+the value, or serialise it yourself.
 
 ## Upgrading from 2.1
 

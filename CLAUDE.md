@@ -118,10 +118,13 @@ major, since its return type is the public contract.
 - **`Entry::setAttribute()` cannot take `string $key`.** The parent leaves the parameter untyped and PHP
   forbids restricting an inherited parameter type, so `mixed` is the only admissible annotation. Narrowing
   it is a fatal error, not a style improvement.
-- **Removing a cast while writing a value that needs one degrades the value.** `set($key, ['a'], false)`
-  leaves the array unserialised: on an update the driver grammar serialises it and the value reads back as
-  the raw JSON string, on an insert the write fails. Frozen by `tests/EdgeCasesTest.php` and documented as a
-  limitation; changing it would be a decision of its own.
+- **A value must be storable as text, and `Client::refuseAnUnstorableValue()` enforces it.** The check reads
+  `$entry->getAttributes()['value']` **after** assignment rather than classifying which casts serialise —
+  what sits there is exactly what would be bound to the query, so the guard holds whatever the framework
+  does. Do not replace it with a list of "serialising casts": that list would be a guess about framework
+  internals, and it already missed the scalar-cast case (`set($k, ['a'], 'integer')` fails identically to
+  removing the cast). Stringable objects pass, which is why a `Collection` written without a cast is a
+  complete write — it renders as its own JSON.
 - **`key` is bounded to 191 characters** so a primary key on it stays within the index size limit of older
   MySQL/InnoDB running `utf8mb4`. Do not widen it without that in mind.
 - **Rehydrating an entry from the cache sets both raw attributes in one call.** `setRawAttributes()`
