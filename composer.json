@@ -1,9 +1,16 @@
 {
     "name": "bgaze/laravel-kvstore",
-    "description": "A simple and easy to use key-value store for Laravel 5.5+",
-    "require": {
-        "laravel/framework": ">=5.5.0"
-    },
+    "description": "Database-backed key-value store for Laravel, cached and with per-entry type casting.",
+    "keywords": [
+        "laravel",
+        "key-value",
+        "store",
+        "settings",
+        "options",
+        "cache",
+        "casting"
+    ],
+    "homepage": "https://packages.bgaze.fr/laravel-kvstore",
     "license": "MIT",
     "authors": [
         {
@@ -11,6 +18,28 @@
             "email": "benjamin@bgaze.fr"
         }
     ],
+    "require": {
+        "php": "^8.2",
+        "illuminate/cache": "^12.0 || ^13.0",
+        "illuminate/database": "^12.0 || ^13.0",
+        "illuminate/support": "^12.0 || ^13.0"
+    },
+    "require-dev": {
+        "larastan/larastan": "^3.0",
+        "laravel/pint": "^1.18",
+        "orchestra/testbench": "^10.0 || ^11.0",
+        "phpunit/phpunit": "^11.5 || ^12.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Bgaze\\KvStore\\": "src"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Bgaze\\KvStore\\Tests\\": "tests"
+        }
+    },
     "extra": {
         "laravel": {
             "providers": [
@@ -21,9 +50,9 @@
             }
         }
     },
-    "autoload": {
-        "psr-4": {
-            "Bgaze\\KvStore\\": "src"
-        }
-    }
+    "config": {
+        "sort-packages": true
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
 }

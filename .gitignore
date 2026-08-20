@@ -1,7 +1,9 @@
+/.claude
 /.idea
 /vendor
 /tmp
+/.phpunit.cache
+.phpunit.result.cache
 composer.lock
 todo.md
-/.claude
 .DS_Store
