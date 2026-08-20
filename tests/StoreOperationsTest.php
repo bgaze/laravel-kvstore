@@ -48,6 +48,23 @@ class StoreOperationsTest extends TestCase
         $this->assertNull(KvStore::get('key', 'default'));
     }
 
+    public function test_has_tells_a_stored_null_from_a_missing_key(): void
+    {
+        KvStore::set('key', null);
+
+        $this->assertTrue(KvStore::has('key'));
+        $this->assertFalse(KvStore::has('missing'));
+    }
+
+    public function test_has_reads_from_the_cache_like_the_other_reads(): void
+    {
+        KvStore::set('key', 'a value');
+
+        KvStore::all();
+
+        $this->assertSame(0, $this->countQueries(fn () => KvStore::has('key')));
+    }
+
     public function test_remove_deletes_a_single_entry(): void
     {
         KvStore::set('a', 'first');
@@ -87,5 +104,19 @@ class StoreOperationsTest extends TestCase
 
         $this->assertSame(1, DB::table('kvstore')->count());
         $this->assertSame('second', KvStore::get('key'));
+    }
+
+    private function countQueries(callable $callback): int
+    {
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+
+        try {
+            $callback();
+        } finally {
+            DB::disableQueryLog();
+        }
+
+        return count(DB::getQueryLog());
     }
 }

@@ -25,7 +25,7 @@ class CacheBehaviorTest extends TestCase
 
         KvStore::all();
 
-        $cached = Cache::get('settings-store-cache');
+        $cached = Cache::get('kvstore');
 
         $this->assertInstanceOf(Collection::class, $cached);
         $this->assertSame(['a' => 42, 'b' => 'a string'], $cached->all());
@@ -44,39 +44,39 @@ class CacheBehaviorTest extends TestCase
     public function test_set_drops_the_cache(): void
     {
         KvStore::all();
-        $this->assertTrue(Cache::has('settings-store-cache'));
+        $this->assertTrue(Cache::has('kvstore'));
 
         KvStore::set('key', 'a value');
 
-        $this->assertFalse(Cache::has('settings-store-cache'));
+        $this->assertFalse(Cache::has('kvstore'));
     }
 
     public function test_remove_drops_the_cache(): void
     {
         KvStore::set('key', 'a value');
         KvStore::all();
-        $this->assertTrue(Cache::has('settings-store-cache'));
+        $this->assertTrue(Cache::has('kvstore'));
 
         KvStore::remove('key');
 
-        $this->assertFalse(Cache::has('settings-store-cache'));
+        $this->assertFalse(Cache::has('kvstore'));
     }
 
     public function test_refresh_drops_the_cache(): void
     {
         KvStore::all();
-        $this->assertTrue(Cache::has('settings-store-cache'));
+        $this->assertTrue(Cache::has('kvstore'));
 
         KvStore::refresh();
 
-        $this->assertFalse(Cache::has('settings-store-cache'));
+        $this->assertFalse(Cache::has('kvstore'));
     }
 
     /**
-     * A write going through the model instead of the store leaves the cache
-     * untouched, so reads keep serving the previous value until refresh().
+     * A write going through the model is observed: saving an entry drops the
+     * cache on its own, so no refresh() is needed to read the new value.
      */
-    public function test_a_write_bypassing_the_store_serves_a_stale_read(): void
+    public function test_a_write_through_the_model_drops_the_cache(): void
     {
         KvStore::set('key', 'first');
         KvStore::all();
@@ -85,29 +85,19 @@ class CacheBehaviorTest extends TestCase
         $entry->value = 'second';
         $entry->save();
 
-        $this->assertSame('first', KvStore::get('key'));
-
-        KvStore::refresh();
-
+        $this->assertFalse(Cache::has('kvstore'));
         $this->assertSame('second', KvStore::get('key'));
     }
 
-    /**
-     * A raw SQL write cannot be observed by the package at all: refresh() is
-     * the only remedy.
-     */
-    public function test_a_raw_sql_write_serves_a_stale_read(): void
+    public function test_a_delete_through_the_model_drops_the_cache(): void
     {
         KvStore::set('key', 'first');
         KvStore::all();
 
-        DB::table('kvstore')->where('key', 'key')->update(['value' => 'second']);
+        Entry::query()->findOrFail('key')->delete();
 
-        $this->assertSame('first', KvStore::get('key'));
-
-        KvStore::refresh();
-
-        $this->assertSame('second', KvStore::get('key'));
+        $this->assertFalse(Cache::has('kvstore'));
+        $this->assertFalse(KvStore::has('key'));
     }
 
     private function countQueries(callable $callback): int

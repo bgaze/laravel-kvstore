@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Bgaze\KvStore\Tests;
 
-use CreateKvstoreTable;
+use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use ReflectionClass;
+use ReflectionMethod;
 
 /**
  * The migration is shipped to be published, so its shape is part of the public
@@ -57,20 +59,27 @@ class MigrationTest extends TestCase
     }
 
     /**
-     * A fluent unique() next to a fluent primary() is dead weight: only the
-     * first fluent index of a column is registered, and primary comes first.
-     * The migration therefore emits a single statement, with no unique index.
+     * The key column is bounded so that a primary key on it stays within the
+     * index size limit of older MySQL versions running utf8mb4.
      */
     public function test_the_shipped_definition_compiles_to_a_single_mysql_statement(): void
     {
         $this->assertSame([
             'create table `kvstore` ('
-                .'`key` varchar(255) not null, '
+                .'`key` varchar(191) not null, '
                 .'`type` varchar(255) null, '
                 .'`value` text null, '
                 .'primary key (`key`)'
                 .") default character set utf8mb4 collate 'utf8mb4_unicode_ci'",
         ], $this->shippedMysqlDdl());
+    }
+
+    public function test_the_migration_is_anonymous(): void
+    {
+        $migration = $this->shippedMigration();
+
+        $this->assertInstanceOf(Migration::class, $migration);
+        $this->assertTrue((new ReflectionClass($migration))->isAnonymous());
     }
 
     /**
@@ -82,9 +91,7 @@ class MigrationTest extends TestCase
      */
     private function shippedMysqlDdl(): array
     {
-        require_once __DIR__.'/../src/migrations/2019_09_29_000000_create_kvstore_table.php';
-
-        $migration = new CreateKvstoreTable;
+        $migration = $this->shippedMigration();
 
         $default = config('database.default');
 
@@ -92,8 +99,10 @@ class MigrationTest extends TestCase
             config(['database.default' => 'mysql_ddl']);
             Schema::clearResolvedInstances();
 
-            $queries = DB::connection('mysql_ddl')->pretend(function () use ($migration): void {
-                $migration->up();
+            $up = new ReflectionMethod($migration, 'up');
+
+            $queries = DB::connection('mysql_ddl')->pretend(function () use ($up, $migration): void {
+                $up->invoke($migration);
             });
         } finally {
             config(['database.default' => $default]);
@@ -102,5 +111,14 @@ class MigrationTest extends TestCase
         }
 
         return array_map(fn (array $query): string => (string) $query['query'], $queries);
+    }
+
+    private function shippedMigration(): Migration
+    {
+        $migration = require __DIR__.'/../src/migrations/2019_09_29_000000_create_kvstore_table.php';
+
+        $this->assertInstanceOf(Migration::class, $migration);
+
+        return $migration;
     }
 }

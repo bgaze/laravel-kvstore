@@ -5,21 +5,17 @@ declare(strict_types=1);
 namespace Bgaze\KvStore;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Config;
 
 /**
+ * A single store entry: a key, the cast to apply to its value, and the value.
+ *
  * @property string $key
- * @property string $type
+ * @property string|null $type
  * @property mixed $value
  */
 class Entry extends Model
 {
-    /**
-     * The table associated with the model.
-     *
-     * @var string
-     */
-    protected $table = 'kvstore';
-
     /**
      * The primary key for the model.
      *
@@ -51,30 +47,50 @@ class Entry extends Model
     /**
      * The attributes that are mass assignable.
      *
-     * @var array
+     * @var list<string>
      */
     protected $fillable = ['key', 'type', 'value'];
 
     /**
-     * Override the casts array to force value casting based on type column.
-     *
-     * @return array
+     * Get the table associated with the model.
      */
-    public function getCasts()
+    public function getTable(): string
     {
-        return empty($this->type) ? [] : ['value' => $this->type];
+        $table = Config::get('kvstore.table');
+
+        return is_string($table) && $table !== '' ? $table : 'kvstore';
+    }
+
+    /**
+     * Get the casts array.
+     *
+     * The cast of an entry is driven by its own type column, so it is resolved
+     * from the stored attribute rather than declared statically. The raw
+     * attribute is read directly: going through the accessor would ask for the
+     * casts of the very column being used to compute them.
+     *
+     * @return array<string, string>
+     */
+    public function getCasts(): array
+    {
+        $type = $this->attributes['type'] ?? null;
+
+        return is_string($type) && $type !== '' ? ['value' => $type] : [];
     }
 
     /**
      * Set a given attribute on the model.
      *
-     * @param  string  $key
-     * @param  mixed  $value
-     * @return mixed
+     * A null written on a JSON-backed cast is stored as an empty array, so that
+     * such an entry always reads back as the collection type it declares
+     * instead of handing back a null the caller has to guard.
+     *
+     * The parameter cannot be narrowed to a string: the parent leaves it
+     * untyped, and PHP forbids restricting an inherited parameter type.
      */
-    public function setAttribute($key, $value)
+    public function setAttribute(mixed $key, mixed $value): mixed
     {
-        if ($this->isJsonCastable($key) && is_null($value)) {
+        if ($value === null && $this->isJsonCastable($key)) {
             $value = [];
         }
 

@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace Bgaze\KvStore\Tests;
 
 use Bgaze\KvStore\Facade as KvStore;
-use Illuminate\Database\Eloquent\InvalidCastException;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use InvalidArgumentException;
 use Throwable;
 
 class EdgeCasesTest extends TestCase
@@ -59,10 +59,9 @@ class EdgeCasesTest extends TestCase
     }
 
     /**
-     * An unknown cast is rejected by the framework when the value is assigned,
-     * so the entry never reaches the database.
+     * An unknown cast is refused up front, before the store is touched at all.
      */
-    public function test_an_unknown_cast_is_refused_when_the_value_is_assigned(): void
+    public function test_an_unknown_cast_is_refused_before_the_store_is_touched(): void
     {
         $thrown = null;
 
@@ -72,30 +71,29 @@ class EdgeCasesTest extends TestCase
             $thrown = $e;
         }
 
-        $this->assertInstanceOf(InvalidCastException::class, $thrown);
+        $this->assertInstanceOf(InvalidArgumentException::class, $thrown);
         $this->assertStringContainsString('not-a-cast', $thrown->getMessage());
         $this->assertSame(0, DB::table('kvstore')->count());
     }
 
     /**
-     * An encrypted cast is honoured in the database but defeated by the cache:
-     * the store caches values already cast, so the cleartext is written to the
-     * cache store.
+     * An encrypted cast would be honoured in the database but defeated by the
+     * cache, which holds values once cast: the cleartext would be written to
+     * the cache store. It is refused, with the reason spelled out.
      */
-    public function test_an_encrypted_cast_leaks_its_cleartext_into_the_cache(): void
+    public function test_an_encrypted_cast_is_refused(): void
     {
-        KvStore::set('key', ['secret' => 'value'], 'encrypted:array');
+        $thrown = null;
 
-        $stored = DB::table('kvstore')->where('key', 'key')->value('value');
+        try {
+            KvStore::set('key', ['secret' => 'value'], 'encrypted:array');
+        } catch (Throwable $e) {
+            $thrown = $e;
+        }
 
-        $this->assertIsString($stored);
-        $this->assertStringNotContainsString('secret', $stored);
-
-        KvStore::all();
-
-        $cached = Cache::get('settings-store-cache');
-
-        $this->assertNotNull($cached);
-        $this->assertSame(['secret' => 'value'], $cached->get('key'));
+        $this->assertInstanceOf(InvalidArgumentException::class, $thrown);
+        $this->assertStringContainsString('cache', $thrown->getMessage());
+        $this->assertSame(0, DB::table('kvstore')->count());
+        $this->assertNull(Cache::get('kvstore'));
     }
 }

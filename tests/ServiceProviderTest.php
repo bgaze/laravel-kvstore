@@ -33,29 +33,34 @@ class ServiceProviderTest extends TestCase
     }
 
     /**
-     * The binding is declared while booting rather than while registering, so a
-     * provider that resolves the store from its own register phase cannot.
+     * The binding is declared while registering, so a provider booting earlier
+     * can already resolve the store from its own register phase.
      */
-    public function test_the_binding_is_not_available_during_registration(): void
+    public function test_the_binding_is_available_during_registration(): void
     {
-        $this->assertFalse(BindingProbeProvider::$boundDuringRegistration);
+        $this->assertTrue(BindingProbeProvider::$boundDuringRegistration);
     }
 
     /**
-     * The binding hands out a new instance on every resolution.
+     * One store per application: the binding is a singleton.
      */
-    public function test_resolving_the_store_twice_yields_two_instances(): void
+    public function test_resolving_the_store_twice_yields_the_same_instance(): void
     {
-        $this->assertNotSame($this->container()->make('kvstore.client'), $this->container()->make('kvstore.client'));
-    }
-
-    public function test_the_class_name_is_not_an_alias_of_the_container_key(): void
-    {
-        $this->assertNotSame($this->container()->make(Client::class), $this->container()->make('kvstore.client'));
+        $this->assertSame($this->container()->make('kvstore.client'), $this->container()->make('kvstore.client'));
     }
 
     /**
-     * Only the migration is publishable, under one single umbrella tag.
+     * The container key of the previous major is kept as an alias, so code
+     * resolving it keeps working and gets the same instance.
+     */
+    public function test_the_container_key_is_an_alias_of_the_class_name(): void
+    {
+        $this->assertSame($this->container()->make(Client::class), $this->container()->make('kvstore.client'));
+    }
+
+    /**
+     * The config and the migration are publishable on their own, and together
+     * under the umbrella tag of the package.
      */
     public function test_the_publishable_groups(): void
     {
@@ -64,14 +69,28 @@ class ServiceProviderTest extends TestCase
             fn (string $group): bool => str_starts_with($group, 'kvstore')
         ));
 
-        $this->assertSame(['kvstore'], $groups);
+        sort($groups);
 
-        $sources = array_map(
+        $this->assertSame(['kvstore', 'kvstore-config', 'kvstore-migrations'], $groups);
+
+        $this->assertSame(['kvstore.php'], $this->publishedSources('kvstore-config'));
+        $this->assertSame(['migrations'], $this->publishedSources('kvstore-migrations'));
+
+        $umbrella = $this->publishedSources('kvstore');
+        sort($umbrella);
+
+        $this->assertSame(['kvstore.php', 'migrations'], $umbrella);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function publishedSources(string $group): array
+    {
+        return array_map(
             fn (int|string $path): string => basename((string) $path),
-            array_keys(ServiceProvider::pathsToPublish(KvStoreServiceProvider::class, 'kvstore'))
+            array_keys(ServiceProvider::pathsToPublish(KvStoreServiceProvider::class, $group))
         );
-
-        $this->assertSame(['migrations'], $sources);
     }
 
     private function container(): Application

@@ -6,6 +6,7 @@ namespace Bgaze\KvStore\Tests;
 
 use Bgaze\KvStore\Facade as KvStore;
 use Illuminate\Support\Facades\DB;
+use InvalidArgumentException;
 
 /**
  * The third argument of set() is three-state: omitted or null keeps the cast
@@ -50,19 +51,21 @@ class TypeSemanticsTest extends TestCase
     }
 
     /**
-     * The three-state test is a loose emptiness check, so every falsy value
-     * other than false is silently understood as "keep the current cast".
+     * Only null and false carry a meaning of their own. Any other value has to
+     * be a cast name, so a falsy one is an error rather than a silent no-op,
+     * and the entry is left exactly as it was.
      */
-    public function test_a_falsy_type_other_than_false_keeps_the_cast(): void
+    public function test_an_empty_cast_name_is_refused_and_leaves_the_entry_untouched(): void
     {
-        foreach (['', 0, '0'] as $index => $falsy) {
-            $key = 'key'.$index;
+        KvStore::set('key', '42', 'integer');
 
-            KvStore::set($key, '42', 'integer');
-            KvStore::set($key, '43', $falsy);
+        $this->expectException(InvalidArgumentException::class);
 
-            $this->assertSame(43, KvStore::get($key));
-            $this->assertSame('integer', $this->storedType($key));
+        try {
+            KvStore::set('key', '43', '');
+        } finally {
+            $this->assertSame(42, KvStore::get('key'));
+            $this->assertSame('integer', $this->storedType('key'));
         }
     }
 

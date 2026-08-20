@@ -7,10 +7,11 @@ namespace Bgaze\KvStore;
 use Illuminate\Support\Facades\Facade as Base;
 
 /**
- * @method static void set($key, $value, $type = null)
- * @method static mixed get($key, $default = null)
- * @method static void remove($keys)
- * @method static \Illuminate\Support\Collection all()
+ * @method static void set(string $key, mixed $value, string|false|null $type = null)
+ * @method static mixed get(string $key, mixed $default = null)
+ * @method static bool has(string $key)
+ * @method static void remove(string|list<string> $keys)
+ * @method static \Illuminate\Support\Collection<string, mixed> all()
  * @method static void refresh()
  *
  * @see Client
@@ -19,11 +20,9 @@ class Facade extends Base
 {
     /**
      * Get the registered name of the component.
-     *
-     * @return string
      */
-    protected static function getFacadeAccessor()
+    protected static function getFacadeAccessor(): string
     {
-        return 'kvstore.client';
+        return Client::class;
     }
 }
