@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Bgaze\KvStore;
 
 use Illuminate\Database\Eloquent\Model;
@@ -9,8 +11,8 @@ use Illuminate\Database\Eloquent\Model;
  * @property string $type
  * @property mixed $value
  */
-class Entry extends Model {
-
+class Entry extends Model
+{
     /**
      * The table associated with the model.
      *
@@ -58,7 +60,8 @@ class Entry extends Model {
      *
      * @return array
      */
-    public function getCasts() {
+    public function getCasts()
+    {
         return empty($this->type) ? [] : ['value' => $this->type];
     }
 
@@ -69,12 +72,12 @@ class Entry extends Model {
      * @param  mixed  $value
      * @return mixed
      */
-    public function setAttribute($key, $value) {
+    public function setAttribute($key, $value)
+    {
         if ($this->isJsonCastable($key) && is_null($value)) {
             $value = [];
         }
 
         return parent::setAttribute($key, $value);
     }
-
 }

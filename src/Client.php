@@ -1,17 +1,18 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Bgaze\KvStore;
 
-use Illuminate\Support\Facades\Cache;
 use Bgaze\KvStore\Entry as Store;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 
 /**
- * Description of Settings
- *
- * @author bgaze
+ * The public API of the store.
  */
-class Client {
-
+class Client
+{
     /**
      * The cache key to use for the setting store.
      */
@@ -19,23 +20,24 @@ class Client {
 
     /**
      * Create or update a setting value and type.
-     * 
-     * @param string $key
-     * @param mixed $value
-     * @param string|null $type
+     *
+     * @param  string  $key
+     * @param  mixed  $value
+     * @param  string|null  $type
      * @return void
      */
-    public static function set($key, $value, $type = null) {
+    public static function set($key, $value, $type = null)
+    {
         $entry = Store::firstOrNew(['key' => $key]);
-        
+
         if ($type === false) {
             $entry->type = null;
-        } elseif (!empty($type)) {
+        } elseif (! empty($type)) {
             $entry->type = $type;
         }
 
         $entry->value = $value;
-        
+
         $entry->save();
 
         self::refresh();
@@ -48,7 +50,8 @@ class Client {
      * @param  mixed  $default
      * @return mixed
      */
-    public static function get($key, $default = null) {
+    public static function get($key, $default = null)
+    {
         return self::all()->get($key, $default);
     }
 
@@ -58,29 +61,31 @@ class Client {
      * @param  string|array  $keys
      * @return void
      */
-    public static function remove($keys) {
+    public static function remove($keys)
+    {
         Store::destroy($keys);
         self::refresh();
     }
 
     /**
      * Load store content from cache, creating it if needed.
-     * 
-     * @return \Illuminate\Support\Collection
+     *
+     * @return Collection
      */
-    public static function all() {
+    public static function all()
+    {
         return Cache::rememberForever(self::CACHE, function () {
-                    return Store::all()->pluck('value', 'key');
-                });
+            return Store::all()->pluck('value', 'key');
+        });
     }
 
     /**
      * Force cache refresh.
-     * 
+     *
      * @return void
      */
-    public static function refresh() {
+    public static function refresh()
+    {
         Cache::forget(self::CACHE);
     }
-
 }

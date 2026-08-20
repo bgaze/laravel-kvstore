@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Bgaze\KvStore;
 
 use Illuminate\Support\Facades\Facade as Base;
@@ -11,17 +13,17 @@ use Illuminate\Support\Facades\Facade as Base;
  * @method static \Illuminate\Support\Collection all()
  * @method static void refresh()
  *
- * @see \Bgaze\KvStore\Client
+ * @see Client
  */
-class Facade extends Base {
-
+class Facade extends Base
+{
     /**
      * Get the registered name of the component.
      *
      * @return string
      */
-    protected static function getFacadeAccessor() {
+    protected static function getFacadeAccessor()
+    {
         return 'kvstore.client';
     }
-
 }

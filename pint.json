@@ -1,8 +1,5 @@
 {
     "preset": "laravel",
-    "exclude": [
-        "src"
-    ],
     "rules": {
         "declare_strict_types": true,
         "strict_comparison": true,
