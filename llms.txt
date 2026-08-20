@@ -1,0 +1,22 @@
+# bgaze/laravel-kvstore
+
+> A database-backed key-value store for Laravel, cached as a whole and with a
+> per-entry cast. Sized for settings: read on most requests, written rarely.
+> The store is cached as one single entry holding every key with its value
+> already cast, so a cold read costs one query for the whole store.
+
+Two things are easy to get wrong and worth reading before using the package: the
+third argument of `set()` is three-state — it says what to do with the entry's
+cast, not what the value is — and the cache is not per key, so any write drops
+the whole store.
+
+## Docs
+
+- [Usage guide](https://github.com/bgaze/laravel-kvstore/blob/master/docs/llm/index.md): public API, three-state `$type`, supported and refused casts, cache model and invalidation, configuration, known limitations, upgrade notes. Shipped with the package at `docs/llm/index.md`.
+- [README](https://github.com/bgaze/laravel-kvstore/blob/master/README.md): install and quick start.
+- [Documentation site](https://packages.bgaze.fr/laravel-kvstore): the human-facing page.
+
+## Optional
+
+- [Source](https://github.com/bgaze/laravel-kvstore/tree/master/src): five files, no abstraction layer.
+- [Test suite](https://github.com/bgaze/laravel-kvstore/tree/master/tests): every documented behaviour as an executable expectation.
