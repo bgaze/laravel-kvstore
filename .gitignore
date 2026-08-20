@@ -1,1 +1,7 @@
 /.idea
+/vendor
+/tmp
+composer.lock
+todo.md
+/.claude
+.DS_Store
