@@ -103,6 +103,11 @@ package works with a cache store told to restrict unserialization
 (`cache.serializable_classes`). On Octane the in-memory copy is dropped at the
 start of every request.
 
+`get()` and `has()` cast only the key you ask for, so an entry carrying a cast
+Laravel refuses — a row written by hand, or by 1.x, which validated nothing —
+breaks that key alone rather than your whole store. `all()` casts everything, so
+it still raises on one.
+
 Writes through the facade invalidate the cache. So do writes through the
 `Bgaze\KvStore\Entry` model, which covers seeders and direct model writes. A raw
 SQL write cannot be seen — call `KvStore::refresh()` yourself after one.
@@ -117,6 +122,10 @@ name, or to manage invalidation yourself:
 ```
 php artisan vendor:publish --tag=kvstore-config
 ```
+
+## Upgrading from 2.1
+
+Nothing to do. Reading one key no longer casts the whole store.
 
 ## Upgrading from 2.0
 

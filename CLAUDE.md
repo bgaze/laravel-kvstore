@@ -45,7 +45,7 @@ vendor/bin/phpstan analyse
 Five source files plus a config file, no abstraction layer:
 
 - `src/Client.php` — the whole public API: `set()`, `get()`, `has()`, `remove()`, `all()`, `refresh()`,
-  `flushResolved()`. An injectable service taking the cache factory, the config repository and a logger;
+  `flushResolved()`. Reads go through `raw()` (cached payload) then `castOne()` (one entry). An injectable service taking the cache factory, the config repository and a logger;
   bound as a singleton on `Client::class`, with `kvstore.client` kept as an alias.
 - `src/Entry.php` — the Eloquent model over the store table. String primary key `key`, non-incrementing,
   no timestamps. `getTable()` reads `kvstore.table`. `getCasts()` is **overridden** so the row's own `type`
@@ -68,10 +68,20 @@ store in one query. Deliberate for a settings-sized store; it is not a per-key c
 A payload in an older shape is **rebuilt rather than read** (`Client::isRawStore()`), so upgrading needs no
 cache flush.
 
-**Memoisation.** The cast collection is held in `Client::$resolved` for the rest of the request, so repeated
-reads cost neither a query nor a cache round-trip. The client is a **singleton**, so that state outlives the
-request on an event-driven server: the provider wires `flushResolved()` to Octane's `RequestReceived`.
-Removing that listener reintroduces cross-request stale reads.
+**Memoisation — three fields, one place that clears them.** `Client::$rawStore` holds the cached payload
+(the memo that matters: the cost is the cache round-trip, not the casting), `$castValues` holds cast values
+**per key**, `$resolved` holds the whole cast store for `all()`. `refresh()` delegates to `flushResolved()`
+so there is exactly one place that clears all three — do not clear them field by field anywhere else.
+The client is a **singleton**, so that state outlives the request on an event-driven server: the provider
+wires `flushResolved()` to Octane's `RequestReceived`. Removing that listener reintroduces cross-request
+stale reads.
+
+**Lazy casting.** `get()` and `has()` cast only the key being read; `all()` casts the whole store, by
+contract, and reuses whatever `get()` already cast. So an entry carrying a cast the framework refuses breaks
+**its own key only** — which matters on upgrade, since 1.x never validated `$type`. `all()` remains the one
+read that cannot survive such an entry. Making `all()` lazy would mean changing its return contract, so it
+would be a major, not a refinement. In `get()`, the per-key memo is probed with `array_key_exists`, never
+`??=`: a legitimately null value would otherwise be cast again on every read.
 
 **Invalidation.** `set()` and `remove()` drop both the cache and the memo. So do the `saved` and `deleted`
 model events on `Entry`, which covers a seeder or a direct model write; switch that off with

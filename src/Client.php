@@ -58,12 +58,29 @@ class Client
     ];
 
     /**
-     * The store resolved for the current request.
+     * The store as it is cached, held for the current request.
      *
-     * Reading the whole store means fetching one cache entry and applying a
-     * cast per value; memoising that spares every read after the first. The
-     * client is a singleton, so on an event-driven server this outlives the
-     * request: the service provider wires flushResolved() to Octane for that.
+     * What a read costs is the cache round-trip, not the casting, so this is
+     * the memo that matters. The client is a singleton, so on an event-driven
+     * server it outlives the request: the service provider wires
+     * flushResolved() to Octane for that.
+     *
+     * @var array<string, array{value: string|null, type: string|null}>|null
+     */
+    private ?array $rawStore = null;
+
+    /**
+     * Values already cast, per key.
+     *
+     * get() and has() cast the key being read rather than the whole store, so
+     * an entry the framework cannot cast only breaks the key that carries it.
+     *
+     * @var array<string, mixed>
+     */
+    private array $castValues = [];
+
+    /**
+     * The whole store, cast, held for the current request.
      *
      * @var Collection<string, mixed>|null
      */
@@ -116,7 +133,19 @@ class Client
      */
     public function get(string $key, mixed $default = null): mixed
     {
-        return $this->all()->get($key, $default);
+        $raw = $this->raw();
+
+        if (! array_key_exists($key, $raw)) {
+            return value($default);
+        }
+
+        // array_key_exists rather than ??=: a value that is legitimately null
+        // is cached too, instead of being cast again on every read.
+        if (! array_key_exists($key, $this->castValues)) {
+            $this->castValues[$key] = $this->castOne($raw[$key]);
+        }
+
+        return $this->castValues[$key];
     }
 
     /**
@@ -124,7 +153,7 @@ class Client
      */
     public function has(string $key): bool
     {
-        return $this->all()->has($key);
+        return array_key_exists($key, $this->raw());
     }
 
     /**
@@ -145,11 +174,28 @@ class Client
      * The store is cached as one single entry, so this costs one query on a
      * cold read and none afterwards, and one cache read per request.
      *
+     * Casting the whole store is what this method is for, so unlike get() it
+     * cannot survive an entry the framework refuses to cast.
+     *
      * @return Collection<string, mixed>
      */
     public function all(): Collection
     {
-        return $this->resolved ??= $this->cast($this->raw());
+        if ($this->resolved instanceof Collection) {
+            return $this->resolved;
+        }
+
+        $values = [];
+
+        foreach ($this->raw() as $key => $entry) {
+            if (! array_key_exists($key, $this->castValues)) {
+                $this->castValues[$key] = $this->castOne($entry);
+            }
+
+            $values[$key] = $this->castValues[$key];
+        }
+
+        return $this->resolved = new Collection($values);
     }
 
     /**
@@ -160,7 +206,7 @@ class Client
      */
     public function refresh(): void
     {
-        $this->resolved = null;
+        $this->flushResolved();
 
         $this->store()->forget($this->cacheKey());
     }
@@ -174,6 +220,8 @@ class Client
      */
     public function flushResolved(): void
     {
+        $this->rawStore = null;
+        $this->castValues = [];
         $this->resolved = null;
     }
 
@@ -188,13 +236,17 @@ class Client
      */
     private function raw(): array
     {
+        if ($this->rawStore !== null) {
+            return $this->rawStore;
+        }
+
         $store = $this->store();
         $key = $this->cacheKey();
 
         $cached = $store->get($key);
 
         if ($this->isRawStore($cached)) {
-            return $cached;
+            return $this->rawStore = $cached;
         }
 
         try {
@@ -209,14 +261,14 @@ class Client
                 .'This happens when the store is read before its migration has run.'
             );
 
-            // Not cached: the next read tries again, so this heals by itself
-            // once the migration has run.
-            return [];
+            // Not cached: the next request tries again, so this heals by
+            // itself once the migration has run.
+            return $this->rawStore = [];
         }
 
         $store->forever($key, $loaded);
 
-        return $loaded;
+        return $this->rawStore = $loaded;
     }
 
     /**
@@ -237,30 +289,24 @@ class Client
     }
 
     /**
-     * Apply each entry's own cast to its raw value.
+     * Apply an entry's own cast to its raw value.
      *
-     * @param  array<string, array{value: string|null, type: string|null}>  $raw
-     * @return Collection<string, mixed>
+     * @param  array{value: string|null, type: string|null}  $entry
      */
-    private function cast(array $raw): Collection
+    private function castOne(array $entry): mixed
     {
-        return new Collection(array_map(
-            function (array $entry): mixed {
-                $type = $entry['type'];
+        $type = $entry['type'];
 
-                if (! is_string($type) || $type === '') {
-                    return $entry['value'];
-                }
+        if (! is_string($type) || $type === '') {
+            return $entry['value'];
+        }
 
-                // Both raw attributes go in with one call on purpose: the cast
-                // is read from the entry's own type, and hydrating them in two
-                // steps lets the second call wipe what the first one set.
-                return (new Entry)
-                    ->setRawAttributes(['value' => $entry['value'], 'type' => $type], true)
-                    ->value;
-            },
-            $raw
-        ));
+        // Both raw attributes go in with one call on purpose: the cast is read
+        // from the entry's own type, and hydrating them in two steps lets the
+        // second call wipe what the first one set.
+        return (new Entry)
+            ->setRawAttributes(['value' => $entry['value'], 'type' => $type], true)
+            ->value;
     }
 
     /**

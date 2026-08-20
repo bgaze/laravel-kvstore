@@ -113,9 +113,12 @@ That matters: caching cast values would put `Carbon`, `Collection` and
 unserialization (`cache.serializable_classes`) cannot rebuild them. Casts are
 applied when the store is read.
 
-A cold read costs **one query for the whole store**. The result is then held for
+A cold read costs **one query for the whole store**. The payload is then held for
 the rest of the request, so repeated reads cost neither a query nor a cache
 round-trip.
+
+`get()` and `has()` cast **only the key being read**, and hold the result per
+key. `all()` casts the whole store, which is what it is for.
 
 This is not a per-key cache and must not be mistaken for one. The trade-off is
 deliberate: it suits a store read almost entirely on every request, and it means
@@ -134,6 +137,20 @@ any write drops the cache for every key at once.
 
 **A payload written by an earlier version is rebuilt, not read.** Upgrading needs
 no cache flush.
+
+## An entry the framework cannot cast
+
+The cast is validated on write, so `set()` cannot store a name the framework
+would refuse. Rows written otherwise can: a direct SQL write, or a table filled
+by 1.x, which validated nothing.
+
+Such an entry breaks **only the key that carries it**:
+
+- `get()` on that key raises `InvalidCastException`. Every other key reads fine.
+- `has()` casts nothing at all, so it answers for any key.
+- `all()` casts the whole store, so it raises. That is the limit of reading the
+  store as a whole — read the keys you need with `get()` if the table may hold
+  an entry you cannot fix yet.
 
 ## Reading the store before its table exists
 
@@ -190,6 +207,11 @@ break casting silently.
   is the intended design, not an oversight.
 - **`value` is a `text` column**, so roughly 64 KB per entry. Change the column
   in the published migration if you need more.
+
+## Upgrading from 2.1
+
+Nothing to do. `get()` and `has()` no longer cast the whole store, so an entry
+carrying a cast the framework refuses stops making its neighbours unreadable.
 
 ## Upgrading from 2.0
 
