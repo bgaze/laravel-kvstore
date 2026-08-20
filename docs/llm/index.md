@@ -86,9 +86,12 @@ the value is read. Supported names:
 `date`, `datetime`, `decimal`, `immutable_date` and `immutable_datetime` accept
 a parameter: `decimal:2`, `datetime:Y-m-d H:i`.
 
-**Encrypted casts are refused.** The store is read as a whole, so every
-encrypted entry would be decrypted on every request whether it is used or not.
-Encrypt the value yourself before handing it over if you need that.
+**Encrypted casts are refused.** `all()` casts every entry, so a value that
+cannot be decrypted — after an `APP_KEY` rotation without `APP_PREVIOUS_KEYS`,
+typically — would make the **whole store** unreadable rather than just its own
+key. Encrypt the value yourself before handing it over: the ciphertext is then an
+opaque string to this package, and decrypting it stays where you control it, on
+the one value you asked for.
 
 A `null` written on a JSON-backed cast (`array`, `json`, `object`,
 `collection`) is stored as an empty array, so such an entry always reads back as

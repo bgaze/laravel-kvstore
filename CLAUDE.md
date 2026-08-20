@@ -101,9 +101,14 @@ cannot positively identify as a missing table, so an unreachable database never 
 | `false`                    | **remove** the cast                       |
 
 Anything else raises `InvalidArgumentException` and nothing is written. `encrypted:*` is refused on purpose:
-the store is read as a whole, so every encrypted entry would be decrypted on every request whether it is used
-or not. (Before the raw-value cache, the reason was stronger — the cleartext was written to the cache store.
-Lifting the restriction is now defensible, and a decision of its own.)
+`all()` casts **every** entry, so one value that cannot be decrypted — an `APP_KEY` rotated without
+`APP_PREVIOUS_KEYS` — takes the whole store down rather than its own key. Encrypting by hand keeps the
+ciphertext opaque to the package and the decryption lazy and local, which fails better.
+
+Two weaker arguments have been retired and should not come back: the cleartext leaking into the cache store
+(true before the raw-value cache of v2.1, false since) and the cost of decrypting unused entries (real but
+negligible). Lifting the restriction is defensible the day `all()` stops casting eagerly — which would be a
+major, since its return type is the public contract.
 
 ## Pitfalls
 

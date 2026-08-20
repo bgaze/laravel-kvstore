@@ -369,9 +369,10 @@ class Client
     {
         if (str_starts_with($type, 'encrypted')) {
             throw new InvalidArgumentException(
-                "The [{$type}] cast is not supported: the store is read as a whole, so "
-                .'every encrypted entry would be decrypted on every request whether it is '
-                .'used or not. Encrypt the value yourself before handing it over instead.'
+                "The [{$type}] cast is not supported: all() casts every entry, so a value "
+                .'that cannot be decrypted -- after an APP_KEY rotation, say -- would make '
+                .'the whole store unreadable instead of only its own key. Encrypt the value '
+                .'yourself before handing it over, and decrypt it where you control it.'
             );
         }
 

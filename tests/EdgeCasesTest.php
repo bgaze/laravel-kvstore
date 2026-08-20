@@ -77,9 +77,9 @@ class EdgeCasesTest extends TestCase
     }
 
     /**
-     * An encrypted cast is refused, with the reason spelled out: the store is
-     * read as a whole, so every encrypted entry would be decrypted on every
-     * request whether it is used or not.
+     * An encrypted cast is refused, with the reason spelled out: all() casts
+     * every entry, so one value that cannot be decrypted would take the whole
+     * store down with it rather than just its own key.
      */
     public function test_an_encrypted_cast_is_refused(): void
     {
@@ -92,7 +92,7 @@ class EdgeCasesTest extends TestCase
         }
 
         $this->assertInstanceOf(InvalidArgumentException::class, $thrown);
-        $this->assertStringContainsString('decrypted on every request', $thrown->getMessage());
+        $this->assertStringContainsString('would make the whole store unreadable', $thrown->getMessage());
         $this->assertSame(0, DB::table('kvstore')->count());
         $this->assertNull(Cache::get('kvstore'));
     }

@@ -87,8 +87,10 @@ KvStore::set('retries', '5', false);       // remove it
 ```
 
 Anything else raises an exception, and nothing is written. Encrypted casts are
-refused: the store is read as a whole, so every encrypted entry would be
-decrypted on every request whether you use it or not.
+refused: `all()` casts every entry, so one value you cannot decrypt — after an
+`APP_KEY` rotation, typically — would make your whole store unreadable rather
+than just that key. Encrypt the value yourself instead, and decrypt it where you
+control it.
 
 ## Cache
 
